@@ -42,7 +42,7 @@ class Config:
         config['LOGGING'] = {
             'level': 'INFO',
             'file_enabled': 'true',
-            'file_path': 'logs/vocalyx-dashboard.log',
+            'file_path': 'logs/vocalyx-frontend.log',
             'colored': 'true'
         }
         
@@ -71,7 +71,7 @@ class Config:
         # LOGGING
         self.log_level = self.config.get('LOGGING', 'level', fallback='INFO')
         self.log_file_enabled = self.config.getboolean('LOGGING', 'file_enabled', fallback=True)
-        self.log_file_path = self.config.get('LOGGING', 'file_path', fallback='logs/vocalyx-dashboard.log')
+        self.log_file_path = self.config.get('LOGGING', 'file_path', fallback='logs/vocalyx-frontend.log')
         self.log_colored = self.config.getboolean('LOGGING', 'colored', fallback=True)
     
     def reload(self):
