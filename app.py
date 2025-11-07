@@ -1,14 +1,16 @@
 """
 vocalyx-dashboard/app.py
-Point d'entrée principal du Dashboard (adapté pour architecture microservices)
+Point d'entrée principal du Dashboard (corrigé pour import circulaire)
 """
 
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Depends
+from fastapi import (
+    FastAPI, Request, Depends, HTTPException, status, Form
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 import uvicorn
 
@@ -16,6 +18,10 @@ from config import Config
 from api_client import VocalyxAPIClient
 from routes import dashboard_router
 from logging_config import setup_logging, setup_colored_logging, get_uvicorn_log_config
+
+# --- MODIFICATION: Importer depuis auth_deps ---
+from auth_deps import get_current_token, AUTH_COOKIE_NAME
+# --- FIN MODIFICATION ---
 
 # Initialiser la configuration
 config = Config()
@@ -55,8 +61,6 @@ async def lifespan(app: FastAPI):
     
     # Récupérer les informations du projet admin
     try:
-        # Note: On ne peut pas récupérer la clé admin au démarrage
-        # Elle sera fournie par l'utilisateur dans l'interface
         logger.info(f"📋 Admin project name: {config.admin_project_name}")
     except Exception as e:
         logger.warning(f"⚠️ Could not verify admin project: {e}")
@@ -78,7 +82,7 @@ app = FastAPI(
         "email": "guilhem.l.richard@gmail.com"
     },
     lifespan=lifespan,
-    docs_url=None,  # Pas besoin de docs pour le dashboard
+    docs_url=None,
     redoc_url=None
 )
 
@@ -88,18 +92,117 @@ app.mount("/static", StaticFiles(directory="templates/static"), name="static")
 # Configurer les templates
 templates = Jinja2Templates(directory=config.templates_dir)
 
-# Inclure les routes du dashboard
+# Inclure les routes du dashboard (celles de routes.py)
 app.include_router(dashboard_router)
 
+
+# ============================================================================
+# GESTION DE L'AUTHENTIFICATION
+# ============================================================================
+
+# --- MODIFICATION: La fonction get_current_token a été déplacée ---
+# dans auth_deps.py pour éviter l'import circulaire
+
+@app.get("/login", response_class=HTMLResponse, tags=["Authentication"])
+async def login_page(request: Request):
+    """Sert la page de login HTML"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/auth/login", response_class=JSONResponse, tags=["Authentication"])
+async def login_process(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...)
+):
+    """
+    Endpoint (côté frontend) que le JS de login.js appelle.
+    Il appelle l'API backend pour obtenir le token et le stocke dans un cookie.
+    """
+    api_client: VocalyxAPIClient = request.app.state.api_client
+    
+    try:
+        # 1. Obtenir le token JWT depuis l'API backend
+        token_data = await api_client.login_to_api(username, password)
+        access_token = token_data.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=401, detail="Token non reçu de l'API")
+
+        # 2. Créer la réponse et attacher le cookie
+        response = JSONResponse(content={"status": "ok", "message": "Login successful"})
+        response.set_cookie(
+            key=AUTH_COOKIE_NAME, # Utilise la constante importée
+            value=access_token,
+            httponly=True,       
+            secure=False,        # Mettre True en production (HTTPS)
+            samesite="lax",      
+            max_age=60 * 60 * 24 * 7 # 7 jours
+        )
+        return response
+        
+    except Exception as e:
+        logger.error(f"Login failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identifiants incorrects ou erreur API"
+        )
+
+@app.get("/auth/logout", tags=["Authentication"])
+async def logout(request: Request):
+    """Déconnecte l'utilisateur en supprimant le cookie"""
+    response = RedirectResponse(url="/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    response.delete_cookie(AUTH_COOKIE_NAME) # Utilise la constante importée
+    return response
+
+# ============================================================================
+# ROUTES PRINCIPALES (MODIFIÉES)
+# ============================================================================
+
 @app.get("/", response_class=HTMLResponse, tags=["Root"])
-async def root(request: Request):
-    """Redirection vers le dashboard"""
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "api_url": config.api_url,
-        "DEFAULT_PROJECT_NAME": config.admin_project_name,
-        "DEFAULT_PROJECT_KEY": ""
-    })
+async def root(request: Request, token: str = Depends(get_current_token)):
+    """
+    Sert le Dashboard principal.
+    Protégé par le cookie de login.
+    Récupère la clé API Admin et l'injecte dans le JS.
+    """
+    api_client: VocalyxAPIClient = request.app.state.api_client
+    
+    try:
+        # Utiliser le token pour récupérer la vraie clé API Admin
+        admin_project_details = await api_client.get_admin_api_key_async(token)
+        admin_api_key = admin_project_details.get("api_key")
+        
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request,
+            "api_url": config.api_url,
+            "DEFAULT_PROJECT_NAME": config.admin_project_name,
+            "DEFAULT_PROJECT_KEY": admin_api_key  # Injection de la clé
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération de la clé admin: {e}")
+        # Si la clé admin expire, rediriger vers le login
+        return RedirectResponse(url="/auth/logout", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@app.get("/admin", response_class=HTMLResponse, tags=["Admin"])
+async def admin_page(request: Request, token: str = Depends(get_current_token)):
+    """
+    Sert la nouvelle page d'administration.
+    Récupère également la clé API Admin pour la gestion.
+    """
+    api_client: VocalyxAPIClient = request.app.state.api_client
+    try:
+        admin_project_details = await api_client.get_admin_api_key_async(token)
+        admin_api_key = admin_project_details.get("api_key")
+        
+        return templates.TemplateResponse("admin.html", {
+            "request": request,
+            "ADMIN_API_KEY": admin_api_key
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération de la clé admin: {e}")
+        return RedirectResponse(url="/auth/logout", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
 
 @app.get("/health", tags=["System"])
 def health_check(request: Request):

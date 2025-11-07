@@ -130,6 +130,59 @@ class VocalyxDashboardAPI {
         const response = await fetch(`${this.baseURL}/api/workers/status`);
         return this._handleResponse(response);
     }
+
+    // ========================================================================
+    // GESTION DES UTILISATEURS (NOUVEAU)
+    // ========================================================================
+    
+    async listUsers() {
+        const response = await fetch(`${this.baseURL}/api/admin/users`, {
+            method: 'GET'
+        });
+        return this._handleResponse(response);
+    }
+    
+    async createUser(username, password, isAdmin) {
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('password', password);
+        formData.append('is_admin', isAdmin);
+        
+        const response = await fetch(`${this.baseURL}/api/admin/users`, {
+            method: 'POST',
+            body: formData
+        });
+        return this._handleResponse(response);
+    }
+    
+    async assignProjectToUser(userId, projectId) {
+        const response = await fetch(`${this.baseURL}/api/admin/users/assign-project`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_id: userId, project_id: projectId })
+        });
+        return this._handleResponse(response);
+    }
+    
+    async removeProjectFromUser(userId, projectId) {
+        const response = await fetch(`${this.baseURL}/api/admin/users/remove-project`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_id: userId, project_id: projectId })
+        });
+        return this._handleResponse(response);
+    }
+    
+    async deleteUser(userId) {
+        const response = await fetch(`${this.baseURL}/api/admin/users/${userId}`, {
+            method: 'DELETE'
+        });
+        return this._handleResponse(response);
+    }
 }
 
 // Exporter l'instance globale

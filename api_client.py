@@ -36,6 +36,43 @@ class VocalyxAPIClient:
             headers["X-Internal-Key"] = self.internal_key
         return headers
     
+    async def login_to_api(self, username: str, password: str) -> Dict[str, Any]:
+        """
+        [Async] Appelle l'API backend pour obtenir un token JWT.
+        Utilise le format OAuth2PasswordRequestForm (form data).
+        """
+        try:
+            data = {
+                "username": username,
+                "password": password
+            }
+            # Note: L'API attend du 'form-data', pas du JSON, pour ce endpoint
+            response = await self.async_client.post(
+                f"{self.base_url}/api/auth/token",
+                data=data
+            )
+            response.raise_for_status()
+            return response.json() # Ex: {"access_token": "...", "token_type": "bearer"}
+        except httpx.HTTPError as e:
+            logger.error(f"Error logging into API: {e}")
+            raise
+    
+    async def get_admin_api_key_async(self, jwt_token: str) -> Dict[str, Any]:
+        """
+        [Async] Appelle l'API backend pour obtenir la clé API admin en utilisant un JWT.
+        """
+        try:
+            headers = {"Authorization": f"Bearer {jwt_token}"}
+            response = await self.async_client.get(
+                f"{self.base_url}/api/admin/admin-api-key",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json() # Retourne les détails du projet admin
+        except httpx.HTTPError as e:
+            logger.error(f"Error getting admin API key: {e}")
+            raise
+    
     # ========================================================================
     # PROJETS
     # ========================================================================
@@ -240,6 +277,90 @@ class VocalyxAPIClient:
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"Error cancelling task: {e}")
+            raise
+
+    # ========================================================================
+    # ADMIN USER MANAGEMENT
+    # ========================================================================
+
+    def list_users(self, admin_token: str) -> List[Dict[str, Any]]:
+        """[Admin] Liste tous les utilisateurs"""
+        try:
+            headers = {"Authorization": f"Bearer {admin_token}"}
+            response = self.client.get(
+                f"{self.base_url}/api/admin/users",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error listing users: {e}")
+            raise
+
+    def create_user(self, admin_token: str, username: str, password: str, is_admin: bool) -> Dict[str, Any]:
+        """[Admin] Crée un nouvel utilisateur"""
+        try:
+            headers = {"Authorization": f"Bearer {admin_token}"}
+            data = {
+                "username": username,
+                "password": password,
+                "is_admin": is_admin
+            }
+            response = self.client.post(
+                f"{self.base_url}/api/admin/users",
+                json=data,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error creating user: {e}")
+            raise
+
+    def assign_project_to_user(self, admin_token: str, user_id: str, project_id: str) -> Dict[str, Any]:
+        """[Admin] Associe un projet à un utilisateur"""
+        try:
+            headers = {"Authorization": f"Bearer {admin_token}"}
+            data = {"user_id": user_id, "project_id": project_id}
+            response = self.client.post(
+                f"{self.base_url}/api/admin/users/assign-project",
+                json=data,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error assigning project: {e}")
+            raise
+            
+    def remove_project_from_user(self, admin_token: str, user_id: str, project_id: str) -> Dict[str, Any]:
+        """[Admin] Dissocie un projet d'un utilisateur"""
+        try:
+            headers = {"Authorization": f"Bearer {admin_token}"}
+            data = {"user_id": user_id, "project_id": project_id}
+            response = self.client.post(
+                f"{self.base_url}/api/admin/users/remove-project",
+                json=data,
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error removing project: {e}")
+            raise
+
+    def delete_user(self, admin_token: str, user_id: str) -> Dict[str, Any]:
+        """[Admin] Supprime un utilisateur"""
+        try:
+            headers = {"Authorization": f"Bearer {admin_token}"}
+            response = self.client.delete(
+                f"{self.base_url}/api/admin/users/{user_id}",
+                headers=headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Error deleting user: {e}")
             raise
     
     # ========================================================================
