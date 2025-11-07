@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Vocalyx - Connexion</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+    <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+    <div class="login-container">
+        <form id="login-form">
+            <h2>Vocalyx Dashboard</h2>
+            <p>Veuillez vous connecter pour continuer</p>
+            <div class="form-group">
+                <label for="username">Utilisateur</label>
+                <input type="text" id="username" name="username" value="admin" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Mot de passe</label>
+                <input type="password" id="password" name="password" value="admin" required>
+            </div>
+            <button type="submit" class="btn-login" id="login-button">Connexion</button>
+            <p id="error-message" class="error-message"></p>
+        </form>
+    </div>
+
+    <script src="/static/js/login.js"></script>
+</body>
+</html>
