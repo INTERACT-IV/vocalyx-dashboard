@@ -249,7 +249,7 @@ async def proxy_create_user(
 @dashboard_router.post("/api/admin/users/assign-project", tags=["Admin"], dependencies=[Depends(get_current_token)])
 async def proxy_assign_project(
     request: Request,
-    data: dict = Body(...), # Attendre du JSON: {"user_id": "...", "project_id": "..."}
+    data: dict = Body(...),
     token: str = Depends(get_current_token)
 ):
     """[Proxy Admin] Associe un projet à un utilisateur"""
@@ -273,7 +273,7 @@ async def proxy_assign_project(
 @dashboard_router.post("/api/admin/users/remove-project", tags=["Admin"], dependencies=[Depends(get_current_token)])
 async def proxy_remove_project(
     request: Request,
-    data: dict = Body(...), # Attendre du JSON: {"user_id": "...", "project_id": "..."}
+    data: dict = Body(...),
     token: str = Depends(get_current_token)
 ):
     """[Proxy Admin] Dissocie un projet d'un utilisateur"""
