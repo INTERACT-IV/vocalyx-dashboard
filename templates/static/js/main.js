@@ -76,7 +76,7 @@ function formatDuration(seconds) {
 
 /**
  * ---------------------------------------------------------------------------
- * ✅ MODIFICATION : Correction du comptage des tâches (totalData)
+ * ✅ MODIFICATION : Lecture de health.total_audio_processed_s
  * ---------------------------------------------------------------------------
  * Remplit la grille de monitoring des workers
  */
@@ -84,17 +84,13 @@ function renderWorkerMonitoringGrid(stats) {
     const gridBody = document.getElementById("worker-monitoring-grid");
     if (!gridBody) return;
 
-    // 'stats' est la réponse complète de /api/workers (qui appelle get_celery_stats)
-    const workerStats = stats.stats || {}; // Contient CPU/RAM/etc.
-    const activeWorkers = stats.workers || {}; // Contient les tâches actives
-    const registeredWorkers = stats.registered_tasks || {}; // Liste des workers qui *devraient* être là
+    const workerStats = stats.stats || {};
+    const activeWorkers = stats.workers || {};
+    const registeredWorkers = stats.registered_tasks || {};
 
     gridBody.innerHTML = "";
 
-    // Utiliser les noms des workers actifs (stats) comme source principale
     const allWorkerNames = new Set(Object.keys(workerStats));
-    
-    // Ajouter les workers enregistrés qui pourraient être hors ligne (pas dans stats)
     Object.keys(registeredWorkers).forEach(name => allWorkerNames.add(name));
 
     if (allWorkerNames.size === 0) {
@@ -106,14 +102,19 @@ function renderWorkerMonitoringGrid(stats) {
         const row = document.createElement("tr");
         const workerData = workerStats[workerName];
         const activeTasks = activeWorkers[workerName] || [];
-
+        
         const health = workerData?.health;
         
-        let status = "offline";
-        let statusClass = "status-offline"; // Classe CSS pour la ligne
-        let statusIndicator = "status-error"; // Classe CSS pour la pastille
+        // --- AJOUT LECTURE DB_STATS ---
+        // 'db_stats' est maintenant ajouté par l'API
+        const db_stats = workerData?.db_stats;
+        // --- FIN AJOUT ---
         
-        if (workerData) { // Si le worker est vivant et répond aux stats
+        let status = "offline";
+        let statusClass = "status-offline";
+        let statusIndicator = "status-error";
+        
+        if (workerData) {
             if (activeTasks.length > 0) {
                 status = "busy";
                 statusClass = "status-processing";
@@ -125,28 +126,32 @@ function renderWorkerMonitoringGrid(stats) {
             }
         }
 
-        // Tâches
+        // Tâches (corrigé)
         let tasksDone = 0;
         const totalData = workerData?.total;
-        
         if (typeof totalData === 'number') {
-            tasksDone = totalData; // Au cas où ce serait juste un nombre
+            tasksDone = totalData;
         } else if (typeof totalData === 'object' && totalData !== null) {
-            // Si c'est un objet {'task_name': 10, ...}, on additionne les valeurs
             tasksDone = Object.values(totalData).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0);
         }
-
+        
         // --- Exploitation des données 'health' ---
         const cpuPercent = health?.cpu_percent;
         const ramPercent = health?.memory_percent;
         const ramRss = health?.memory_rss_bytes;
-        const uptime = health?.uptime_seconds;        
+        const uptime = health?.uptime_seconds;
+        
+        // --- MODIFICATION : Lire depuis db_stats ---
+        const totalAudio = db_stats?.total_audio_processed_s;
+        
+        const activeTaskCount = activeTasks.length;
+        const chargeBar = "N/A"; 
 
-        row.className = statusClass; // Appliquer la classe à la ligne
+        row.className = statusClass;
         row.innerHTML = `
             <td class="col-instance">${workerName.split('@')[0]}</td>
             <td class="col-status"><span class="worker-status-light ${statusIndicator}"></span> ${status}</td>
-            <td class="col-charge-num">${chargeNum}</td>
+            <td class="col-charge-num">${activeTaskCount}</td>
             <td class="col-charge-bar">${chargeBar}</td>
             <td class="col-cpu-num">${cpuPercent != null ? cpuPercent.toFixed(1) + '%' : 'N/A'}</td>
             <td class="col-cpu-bar">${createProgressBar(cpuPercent)}</td>
@@ -154,8 +159,9 @@ function renderWorkerMonitoringGrid(stats) {
             <td class="col-ram-bar">${createProgressBar(ramPercent)}</td>
             <td class="col-uptime">${formatUptime(uptime)}</td>
             <td class="col-jobs">${tasksDone}</td>
-            <td class="col-audio">N/A</td>
+            <td class="col-audio">${formatDuration(totalAudio)}</td> 
         `;
+        
         gridBody.appendChild(row);
     });
 }
