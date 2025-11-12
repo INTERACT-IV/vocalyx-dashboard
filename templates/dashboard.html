@@ -156,10 +156,13 @@
         DEFAULT_PROJECT_NAME: "{{ DEFAULT_PROJECT_NAME|e }}",
         DEFAULT_PROJECT_KEY: "{{ DEFAULT_PROJECT_KEY|e }}"
     };
+    console.log("✅ VOCALYX_CONFIG loaded:", window.VOCALYX_CONFIG);
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.js"></script>
+
+<!-- ✅ ORDRE CRITIQUE : utils AVANT api AVANT tout le reste -->
 <script src="/static/js/utils.js"></script>
 <script src="/static/js/api.js"></script>
 <script src="/static/js/modal.js"></script>

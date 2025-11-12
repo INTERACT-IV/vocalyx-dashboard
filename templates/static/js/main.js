@@ -1,6 +1,11 @@
 // templates/static/js/main.js
 // Point d'entrée principal de l'application (adapté pour l'architecture API)
 
+let currentPage = 1;
+let currentLimit = 25;
+
+console.log("🚀 main.js loaded");
+
 /**
  * Récupère tous les projets et remplit les listes <select>
  */
@@ -8,7 +13,6 @@ async function populateProjectFilters() {
     const filterSelect = document.getElementById("project-filter");
     const uploadSelect = document.getElementById("upload-project-select");
     
-    // Utilise la clé admin stockée (sera demandée à l'utilisateur)
     const adminKey = window.VOCALYX_CONFIG?.DEFAULT_PROJECT_KEY;
     if (!adminKey) {
         console.error("Clé admin non disponible");
@@ -109,9 +113,13 @@ async function updateWorkerStatus() {
  * Rafraîchit la grille des transcriptions
  */
 async function refreshTranscriptions(page = 1, limit = 25) {
+    console.log("🔄 refreshTranscriptions called:", { page, limit });
+    
     const status = document.getElementById("status-filter")?.value || null;
     const search = document.getElementById("search-input")?.value || null;
     const project = document.getElementById("project-filter")?.value || null;
+    
+    console.log("📋 Filters:", { status, search, project });
     
     currentPage = page;
     currentLimit = limit;
@@ -122,19 +130,24 @@ async function refreshTranscriptions(page = 1, limit = 25) {
         if (search) filters.search = search;
         if (project) filters.project = project;
         
-        // Récupérer les transcriptions
+        console.log("⏳ Fetching transcriptions...");
         const transcriptions = await api.getTranscriptions(page, limit, filters);
+        console.log("✅ Transcriptions received:", transcriptions.length, "items");
         
-        // Récupérer le compte pour la pagination
+        console.log("⏳ Fetching count...");
         const countData = await api.countTranscriptions(filters);
+        console.log("✅ Count received:", countData);
+        
         const totalPages = Math.ceil(countData.total_filtered / limit);
         
-        // Afficher les résultats
+        console.log("🎨 Rendering transcriptions...");
         renderTranscriptions(transcriptions);
+        console.log("🎨 Updating pagination...");
         updatePagination(page, totalPages);
+        console.log("✅ refreshTranscriptions complete");
         
     } catch (err) {
-        console.error("Erreur:", err);
+        console.error("❌ Error in refreshTranscriptions:", err);
         const container = document.getElementById("grid-table-body");
         if (container) {
             container.innerHTML = `
@@ -150,12 +163,20 @@ async function refreshTranscriptions(page = 1, limit = 25) {
  * Affiche les transcriptions dans la grille
  */
 function renderTranscriptions(transcriptions) {
+    console.log("🎨 renderTranscriptions called with", transcriptions.length, "items");
+    
     const container = document.getElementById("grid-table-body");
-    if (!container) return;
+    if (!container) {
+        console.error("❌ Container 'grid-table-body' not found!");
+        return;
+    }
+    
+    console.log("✅ Container found:", container);
     
     container.innerHTML = "";
     
     if (transcriptions.length === 0) {
+        console.log("ℹ️ No transcriptions to display");
         container.innerHTML = `
             <tr><td colspan="9" style="text-align:center;padding:2rem;">
                 Aucune transcription trouvée.
@@ -164,9 +185,11 @@ function renderTranscriptions(transcriptions) {
         return;
     }
     
+    console.log("🔨 Building table rows...");
     const fragment = document.createDocumentFragment();
     
-    transcriptions.forEach((entry) => {
+    transcriptions.forEach((entry, index) => {
+        console.log(`  Row ${index}:`, entry.id, entry.status);
         const row = document.createElement("tr");
         row.className = `status-${entry.status || 'unknown'}`;
         row.dataset.id = entry.id;
@@ -191,9 +214,13 @@ function renderTranscriptions(transcriptions) {
         fragment.appendChild(row);
     });
     
+    console.log("📦 Appending fragment to container...");
     container.appendChild(fragment);
+    console.log("✅ Rows appended");
+    
     attachRowClickEvents();
     attachDeleteEvents();
+    console.log("✅ renderTranscriptions complete");
 }
 
 /**
@@ -298,12 +325,21 @@ function attachDeleteEvents() {
     });
 }
 
-// Variables globales
-let currentPage = 1;
-let currentLimit = 25;
+// ============================================================================
+// INITIALISATION - ✅ CORRECTION PRINCIPALE
+// ============================================================================
+
+console.log("🚀 main.js loaded");
 
 // Initialisation au chargement de la page
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log("✅ DOMContentLoaded fired");
+    console.log("🔍 Checking if 'api' exists:", typeof api);
+    console.log("🔍 Checking dashboard elements:");
+    console.log("  - grid-table-body:", document.getElementById("grid-table-body"));
+    console.log("  - status-filter:", document.getElementById("status-filter"));
+    console.log("  - project-filter:", document.getElementById("project-filter"));
+    
     // Démarrer la mise à jour de l'heure
     setInterval(updateCurrentTime, 1000);
     updateCurrentTime();
@@ -313,11 +349,16 @@ document.addEventListener('DOMContentLoaded', () => {
     updateWorkerStatus();
 
     // Charger la liste des projets
-    populateProjectFilters();
+    console.log("📋 Loading projects...");
+    await populateProjectFilters();
 
-    // Charger les transcriptions initiales
-    refreshTranscriptions(1, 25);
+    // Charger les transcriptions
+    console.log("📊 Loading transcriptions...");
+    await refreshTranscriptions(1, 25);
     
-    // Démarrer le polling des transcriptions
+    // Démarrer le polling
+    console.log("🔄 Starting polling...");
     startPolling();
+    
+    console.log("✅ Initialization complete");
 });

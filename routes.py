@@ -86,37 +86,6 @@ async def get_project_details(
 # TRANSCRIPTIONS
 # ============================================================================
 
-@dashboard_router.post("/api/upload", tags=["Transcriptions"])
-async def upload_audio(
-    request: Request,
-    file: UploadFile = File(...),
-    project_name: str = Form(...),
-    api_key: str = Form(...),
-    use_vad: bool = Form(True)
-):
-    """Upload un fichier audio et crée une transcription"""
-    api_client: VocalyxAPIClient = request.app.state.api_client
-    
-    try:
-        # Lire le contenu du fichier
-        content = await file.read()
-        
-        # Créer la transcription via l'API
-        result = await api_client.create_transcription(
-            project_name=project_name,
-            api_key=api_key,
-            file_content=content,
-            filename=file.filename or "upload.bin",
-            use_vad=use_vad
-        )
-        
-        logger.info(f"✅ Transcription created: {result.get('id')}")
-        return JSONResponse(content=result, status_code=201)
-        
-    except Exception as e:
-        logger.error(f"Error uploading audio: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @dashboard_router.get("/api/transcriptions/recent", tags=["Transcriptions"])
 async def get_recent_transcriptions(
     request: Request,
@@ -124,12 +93,15 @@ async def get_recent_transcriptions(
     limit: int = 25,
     status: str = None,
     project: str = None,
-    search: str = None
+    search: str = None,
+    token: str = Depends(get_current_token)  # ✅ AJOUT
 ):
     """Récupère les transcriptions récentes (proxy vers l'API)"""
     api_client: VocalyxAPIClient = request.app.state.api_client
     
     try:
+        # ✅ MODIFICATION : Utiliser la clé interne au lieu du JWT
+        # Car l'API backend attend X-Internal-Key pour ces routes
         transcriptions = api_client.get_transcriptions(
             page=page,
             limit=limit,
@@ -147,7 +119,8 @@ async def count_transcriptions(
     request: Request,
     status: str = None,
     project: str = None,
-    search: str = None
+    search: str = None,
+    token: str = Depends(get_current_token)  # ✅ AJOUT
 ):
     """Compte les transcriptions (proxy vers l'API)"""
     api_client: VocalyxAPIClient = request.app.state.api_client
@@ -164,7 +137,11 @@ async def count_transcriptions(
         raise HTTPException(status_code=500, detail=str(e))
 
 @dashboard_router.get("/api/transcriptions/{transcription_id}", tags=["Transcriptions"])
-async def get_transcription(request: Request, transcription_id: str):
+async def get_transcription(
+    request: Request, 
+    transcription_id: str,
+    token: str = Depends(get_current_token)  # ✅ AJOUT
+):
     """Récupère une transcription par ID (proxy vers l'API)"""
     api_client: VocalyxAPIClient = request.app.state.api_client
     
@@ -176,7 +153,11 @@ async def get_transcription(request: Request, transcription_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 @dashboard_router.delete("/api/transcriptions/{transcription_id}", tags=["Transcriptions"])
-async def delete_transcription(request: Request, transcription_id: str):
+async def delete_transcription(
+    request: Request, 
+    transcription_id: str,
+    token: str = Depends(get_current_token)  # ✅ AJOUT
+):
     """Supprime une transcription (proxy vers l'API)"""
     api_client: VocalyxAPIClient = request.app.state.api_client
     
@@ -192,7 +173,10 @@ async def delete_transcription(request: Request, transcription_id: str):
 # ============================================================================
 
 @dashboard_router.get("/api/workers/status", tags=["Workers"])
-async def get_workers_status(request: Request):
+async def get_workers_status(
+    request: Request,
+    token: str = Depends(get_current_token)  # ✅ AJOUT
+):
     """Récupère le statut des workers (proxy vers l'API)"""
     api_client: VocalyxAPIClient = request.app.state.api_client
     

@@ -7,15 +7,19 @@
  */
 class VocalyxDashboardAPI {
     constructor() {
-        this.baseURL = window.location.origin; // Dashboard URL
+        this.baseURL = window.location.origin;
+        console.log("🔧 API Client initialized, baseURL:", this.baseURL);
     }
     
     /**
      * Gère les erreurs HTTP
      */
     async _handleResponse(response) {
+        console.log("📡 Response received:", response.status, response.url);
+        
         if (!response.ok) {
             const errorText = await response.text();
+            console.error("❌ Response error:", errorText);
             let errorMessage = errorText;
             
             try {
@@ -27,7 +31,10 @@ class VocalyxDashboardAPI {
             
             throw new Error(errorMessage);
         }
-        return response.json();
+        
+        const data = await response.json();
+        console.log("✅ Response data:", data);
+        return data;
     }
     
     // ========================================================================
@@ -86,6 +93,8 @@ class VocalyxDashboardAPI {
     }
     
     async getTranscriptions(page = 1, limit = 25, filters = {}) {
+        console.log("📞 Calling getTranscriptions:", { page, limit, filters });
+        
         const params = new URLSearchParams({
             page: page,
             limit: limit
@@ -95,30 +104,47 @@ class VocalyxDashboardAPI {
         if (filters.project) params.append('project', filters.project);
         if (filters.search) params.append('search', filters.search);
         
-        const response = await fetch(`${this.baseURL}/api/transcriptions/recent?${params}`);
+        const url = `${this.baseURL}/api/transcriptions/recent?${params}`;
+        console.log("🌐 Fetching URL:", url);
+        
+        const response = await fetch(url, {
+            credentials: 'include'
+        });
+        
         return this._handleResponse(response);
     }
     
     async getTranscription(transcriptionId) {
-        const response = await fetch(`${this.baseURL}/api/transcriptions/${transcriptionId}`);
+        const response = await fetch(`${this.baseURL}/api/transcriptions/${transcriptionId}`, {
+            credentials: 'include'  // ✅ AJOUT
+        });
         return this._handleResponse(response);
     }
-    
+
     async deleteTranscription(transcriptionId) {
         const response = await fetch(`${this.baseURL}/api/transcriptions/${transcriptionId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'  // ✅ AJOUT
         });
         return this._handleResponse(response);
     }
     
     async countTranscriptions(filters = {}) {
+        console.log("📞 Calling countTranscriptions:", filters);
+        
         const params = new URLSearchParams();
         
         if (filters.status) params.append('status', filters.status);
         if (filters.project) params.append('project', filters.project);
         if (filters.search) params.append('search', filters.search);
         
-        const response = await fetch(`${this.baseURL}/api/transcriptions/count?${params}`);
+        const url = `${this.baseURL}/api/transcriptions/count?${params}`;
+        console.log("🌐 Fetching URL:", url);
+        
+        const response = await fetch(url, {
+            credentials: 'include'
+        });
+        
         return this._handleResponse(response);
     }
     
@@ -127,7 +153,9 @@ class VocalyxDashboardAPI {
     // ========================================================================
     
     async getWorkersStatus() {
-        const response = await fetch(`${this.baseURL}/api/workers/status`);
+        const response = await fetch(`${this.baseURL}/api/workers/status`, {
+            credentials: 'include'  // ✅ AJOUT
+        });
         return this._handleResponse(response);
     }
 
@@ -187,3 +215,4 @@ class VocalyxDashboardAPI {
 
 // Exporter l'instance globale
 const api = new VocalyxDashboardAPI();
+console.log("✅ Global API instance created");

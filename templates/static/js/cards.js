@@ -1,8 +1,9 @@
 // templates/static/js/cards.js
 // Gestion de la grille de transcription (adapté pour utiliser api.js)
 
-let currentPage = 1;
-let currentLimit = 25;
+// ❌ SUPPRIMER CES LIGNES (elles sont déjà dans main.js)
+// let currentPage = 1;
+// let currentLimit = 25;
 
 /**
  * Attache les événements de clic sur les lignes pour ouvrir la modale
