@@ -64,3 +64,51 @@ function escapeHtml(text) {
     };
     return text.replace(/[&<>"']/g, m => map[m]);
 }
+
+/**
+ * Formate un nombre d'octets en format lisible (Ko, Mo, Go)
+ */
+function bytesToHuman(bytes) {
+    if (bytes == null || bytes === 0) return '0 B';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return parseFloat((bytes / Math.pow(1024, i)).toFixed(1)) + ' ' + ['B', 'Ko', 'Mo', 'Go', 'To'][i];
+}
+
+/**
+ * Formate une durée en secondes en format Uptime (ex: 2j 4h 15m)
+ */
+function formatUptime(seconds) {
+    if (seconds == null || seconds < 1) return 'N/A';
+    
+    seconds = Math.floor(seconds);
+    const d = Math.floor(seconds / (3600*24));
+    const h = Math.floor(seconds % (3600*24) / 3600);
+    const m = Math.floor(seconds % 3600 / 60);
+
+    let str = "";
+    if (d > 0) str += `${d}j `;
+    if (h > 0) str += `${h}h `;
+    if (m > 0) str += `${m}m`;
+    
+    if (str === "") return "< 1m";
+    return str.trim();
+}
+
+/**
+ * Crée le HTML pour une barre de progression
+ */
+function createProgressBar(percent) {
+    if (percent == null) percent = 0;
+    percent = Math.max(0, Math.min(100, percent));
+    
+    let className = "";
+    if (percent > 85) className = "high-usage";
+    
+    return `
+        <div class="progress-bar small">
+            <div class="progress-bar-inner ${className}" style="width: ${percent}%;">
+                ${percent.toFixed(0)}%
+            </div>
+        </div>
+    `;
+}

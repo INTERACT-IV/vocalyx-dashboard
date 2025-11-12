@@ -75,6 +75,93 @@ function formatDuration(seconds) {
 }
 
 /**
+ * ---------------------------------------------------------------------------
+ * ✅ MODIFICATION : Correction du comptage des tâches (totalData)
+ * ---------------------------------------------------------------------------
+ * Remplit la grille de monitoring des workers
+ */
+function renderWorkerMonitoringGrid(stats) {
+    const gridBody = document.getElementById("worker-monitoring-grid");
+    if (!gridBody) return;
+
+    // 'stats' est la réponse complète de /api/workers (qui appelle get_celery_stats)
+    const workerStats = stats.stats || {}; // Contient CPU/RAM/etc.
+    const activeWorkers = stats.workers || {}; // Contient les tâches actives
+    const registeredWorkers = stats.registered_tasks || {}; // Liste des workers qui *devraient* être là
+
+    gridBody.innerHTML = "";
+
+    // Utiliser les noms des workers actifs (stats) comme source principale
+    const allWorkerNames = new Set(Object.keys(workerStats));
+    
+    // Ajouter les workers enregistrés qui pourraient être hors ligne (pas dans stats)
+    Object.keys(registeredWorkers).forEach(name => allWorkerNames.add(name));
+
+    if (allWorkerNames.size === 0) {
+        gridBody.innerHTML = `<tr><td colspan="11" style="text-align:center;">Aucun worker Celery n'est actuellement connecté au broker.</td></tr>`;
+        return;
+    }
+
+    allWorkerNames.forEach(workerName => {
+        const row = document.createElement("tr");
+        const workerData = workerStats[workerName];
+        const activeTasks = activeWorkers[workerName] || [];
+
+        const health = workerData?.health;
+        
+        let status = "offline";
+        let statusClass = "status-offline"; // Classe CSS pour la ligne
+        let statusIndicator = "status-error"; // Classe CSS pour la pastille
+        
+        if (workerData) { // Si le worker est vivant et répond aux stats
+            if (activeTasks.length > 0) {
+                status = "busy";
+                statusClass = "status-processing";
+                statusIndicator = "status-busy";
+            } else {
+                status = "idle";
+                statusClass = "status-done";
+                statusIndicator = "status-ok";
+            }
+        }
+
+        // Tâches
+        let tasksDone = 0;
+        const totalData = workerData?.total;
+        
+        if (typeof totalData === 'number') {
+            tasksDone = totalData; // Au cas où ce serait juste un nombre
+        } else if (typeof totalData === 'object' && totalData !== null) {
+            // Si c'est un objet {'task_name': 10, ...}, on additionne les valeurs
+            tasksDone = Object.values(totalData).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0);
+        }
+
+        // --- Exploitation des données 'health' ---
+        const cpuPercent = health?.cpu_percent;
+        const ramPercent = health?.memory_percent;
+        const ramRss = health?.memory_rss_bytes;
+        const uptime = health?.uptime_seconds;        
+
+        row.className = statusClass; // Appliquer la classe à la ligne
+        row.innerHTML = `
+            <td class="col-instance">${workerName.split('@')[0]}</td>
+            <td class="col-status"><span class="worker-status-light ${statusIndicator}"></span> ${status}</td>
+            <td class="col-charge-num">${chargeNum}</td>
+            <td class="col-charge-bar">${chargeBar}</td>
+            <td class="col-cpu-num">${cpuPercent != null ? cpuPercent.toFixed(1) + '%' : 'N/A'}</td>
+            <td class="col-cpu-bar">${createProgressBar(cpuPercent)}</td>
+            <td class="col-ram-num">${bytesToHuman(ramRss)}</td>
+            <td class="col-ram-bar">${createProgressBar(ramPercent)}</td>
+            <td class="col-uptime">${formatUptime(uptime)}</td>
+            <td class="col-jobs">${tasksDone}</td>
+            <td class="col-audio">N/A</td>
+        `;
+        gridBody.appendChild(row);
+    });
+}
+
+
+/**
  * Met à jour le statut des workers (depuis l'API)
  */
 async function updateWorkerStatus() {
@@ -100,12 +187,21 @@ async function updateWorkerStatus() {
             ${stats.error ? `<span style="color:#dc3545;font-weight:600;">(Erreur: ${stats.error})</span>` : ''}
         `;
 
+        // Remplir la grille détaillée avec les mêmes données
+        renderWorkerMonitoringGrid(stats);
+
     } catch (err) {
         console.error("Failed to fetch worker status:", err);
         headerContainer.innerHTML = `
             <span class="worker-status-light status-error"></span>
             <span style="font-weight:600;">Workers: Indisponible</span>
         `;
+
+        // Vider la grille en cas d'erreur
+        const gridBody = document.getElementById("worker-monitoring-grid");
+        if (gridBody) {
+            gridBody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:red;">Erreur de connexion aux workers.</td></tr>`;
+        }
     }
 }
 
@@ -113,23 +209,16 @@ async function updateWorkerStatus() {
  * Rafraîchit la grille des transcriptions
  */
 async function refreshTranscriptions(page = 1, limit = 25) {
+    console.log("🔄 refreshTranscriptions called:", { page, limit });
+    
     const status = document.getElementById("status-filter")?.value || null;
     const search = document.getElementById("search-input")?.value || null;
     const project = document.getElementById("project-filter")?.value || null;
     
+    console.log("📋 Filters:", { status, search, project });
+    
     currentPage = page;
     currentLimit = limit;
-    
-    // ✅ AJOUT : Afficher un indicateur de chargement
-    const container = document.getElementById("grid-table-body");
-    if (container) {
-        container.innerHTML = `
-            <tr><td colspan="9" style="text-align:center;padding:2rem;">
-                <div class="spinner"></div>
-                <p>Chargement des transcriptions...</p>
-            </td></tr>
-        `;
-    }
     
     try {
         const filters = {};
@@ -137,19 +226,25 @@ async function refreshTranscriptions(page = 1, limit = 25) {
         if (search) filters.search = search;
         if (project) filters.project = project;
         
-        // Appels en parallèle
-        const [transcriptions, countData] = await Promise.all([
-            api.getTranscriptions(page, limit, filters),
-            api.countTranscriptions(filters)
-        ]);
+        console.log("⏳ Fetching transcriptions...");
+        const transcriptions = await api.getTranscriptions(page, limit, filters);
+        console.log("✅ Transcriptions received:", transcriptions.length, "items");
+        
+        console.log("⏳ Fetching count...");
+        const countData = await api.countTranscriptions(filters);
+        console.log("✅ Count received:", countData);
         
         const totalPages = Math.ceil(countData.total_filtered / limit);
         
+        console.log("🎨 Rendering transcriptions...");
         renderTranscriptions(transcriptions);
+        console.log("🎨 Updating pagination...");
         updatePagination(page, totalPages);
+        console.log("✅ refreshTranscriptions complete");
         
     } catch (err) {
-        console.error("❌ Error:", err);
+        console.error("❌ Error in refreshTranscriptions:", err);
+        const container = document.getElementById("grid-table-body");
         if (container) {
             container.innerHTML = `
                 <tr><td colspan="9" style="color:red;text-align:center;padding:2rem;">
@@ -327,7 +422,7 @@ function attachDeleteEvents() {
 }
 
 // ============================================================================
-// INITIALISATION - ✅ CORRECTION PRINCIPALE
+// INITIALISATION
 // ============================================================================
 
 console.log("🚀 main.js loaded");
@@ -335,23 +430,34 @@ console.log("🚀 main.js loaded");
 // Initialisation au chargement de la page
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("✅ DOMContentLoaded fired");
+    console.log("🔍 Checking if 'api' exists:", typeof api);
+    console.log("🔍 Checking dashboard elements:");
+    console.log("  - grid-table-body:", document.getElementById("grid-table-body"));
+    console.log("  - status-filter:", document.getElementById("status-filter"));
+    console.log("  - project-filter:", document.getElementById("project-filter"));
     
     // Démarrer la mise à jour de l'heure
     setInterval(updateCurrentTime, 1000);
     updateCurrentTime();
     
-    // Démarrer le monitoring des workers
+    // Démarrer le monitoring des workers (lancer l'intervalle)
     setInterval(updateWorkerStatus, 5000);
-    updateWorkerStatus();
-
-    // ✅ OPTIMISATION : Charger projets et transcriptions en parallèle
-    console.log("📋 Loading projects and transcriptions in parallel...");
-    await Promise.all([
-        populateProjectFilters(),
-        refreshTranscriptions(1, 25)
-    ]);
     
-    // Démarrer le polling
+    // Lancer tous les chargements de données initiaux en parallèle
+    console.log("🚀 Lancement des chargements initiaux en parallèle...");
+    
+    const statusPromise = updateWorkerStatus(); // 1. Appel statut worker (qui remplit aussi la grille)
+    const projectsPromise = populateProjectFilters(); // 2. Appel liste projets
+    const transcriptionsPromise = refreshTranscriptions(1, 25); // 3. Appel transcriptions (le plus important)
+
+    try {
+        await Promise.all([statusPromise, projectsPromise, transcriptionsPromise]);
+        console.log("✅ Chargements initiaux terminés.");
+    } catch (err) {
+        console.error("❌ Erreur lors du chargement initial parallèle:", err);
+    }
+    
+    // Démarrer le polling (maintenant que tout est chargé)
     console.log("🔄 Starting polling...");
     startPolling();
     
