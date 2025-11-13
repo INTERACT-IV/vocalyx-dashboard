@@ -428,6 +428,48 @@ function attachDeleteEvents() {
 }
 
 // ============================================================================
+// GESTIONNAIRE WEBSOCKET
+// ============================================================================
+
+/**
+ * Gère les messages entrants du WebSocket
+ * @param {object} msg - L'objet JSON reçu du serveur
+ */
+function handleWebSocketMessage(msg) {
+    
+    if (msg.type === "worker_stats") {
+        console.log("📊 Données worker_stats reçues via WS");
+        const stats = msg.data;
+        
+        // Mettre à jour le header
+        const headerContainer = document.getElementById("worker-status-container");
+        const workerCount = stats.worker_count || 0;
+        const activeTasks = stats.active_tasks || 0;
+        
+        let statusClass = "status-ok";
+        if (workerCount === 0) statusClass = "status-error";
+        else if (activeTasks > 0) statusClass = "status-busy";
+
+        if (headerContainer) {
+            headerContainer.innerHTML = `
+                <span class="worker-status-light ${statusClass}"></span>
+                <span style="font-weight:600;">Workers: ${activeTasks} actifs (${workerCount} total)</span>
+                ${stats.error ? `<span style="color:#dc3545;font-weight:600;">(Erreur: ${stats.error})</span>` : ''}
+            `;
+        }
+        
+        // Mettre à jour la grille
+        renderWorkerMonitoringGrid(stats);
+        
+    } else if (msg.type === "transcription_update") {
+        console.log("🔄 Données transcription_update reçues via WS, rafraîchissement...");
+        
+        // Le plus simple et le plus robuste est de tout rafraîchir
+        refreshTranscriptions(currentPage, currentLimit);
+    }
+}
+
+// ============================================================================
 // INITIALISATION
 // ============================================================================
 
@@ -463,9 +505,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error("❌ Erreur lors du chargement initial parallèle:", err);
     }
     
-    // Démarrer le polling (maintenant que tout est chargé)
-    console.log("🔄 Starting polling...");
-    startPolling();
+    // Démarrer la connexion WebSocket
+    console.log("🔄 Connexion au WebSocket pour les mises à jour en temps réel...");
+    api.connectWebSocket(
+        handleWebSocketMessage, // Callback pour les messages
+        (error) => { // Callback pour les erreurs
+            console.error("Échec de la connexion WebSocket initiale:", error);
+            showToast("Connexion temps réel échouée", "error");
+        }
+    );
     
     console.log("✅ Initialization complete");
 });

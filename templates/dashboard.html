@@ -153,6 +153,7 @@
 
 <script>
     window.VOCALYX_CONFIG = {
+        API_URL: "{{ api_url|e }}",
         DEFAULT_PROJECT_NAME: "{{ DEFAULT_PROJECT_NAME|e }}",
         DEFAULT_PROJECT_KEY: "{{ DEFAULT_PROJECT_KEY|e }}"
     };
@@ -167,7 +168,6 @@
 <script src="/static/js/api.js"></script>
 <script src="/static/js/modal.js"></script>
 <script src="/static/js/cards.js"></script>
-<script src="/static/js/polling.js"></script>
 <script src="/static/js/events.js"></script>
 <script src="/static/js/main.js"></script>
 </body>

@@ -8,7 +8,10 @@
 class VocalyxDashboardAPI {
     constructor() {
         this.baseURL = window.location.origin;
+        this.wsURL = this.baseURL.replace(/^http/, 'ws'); // Remplace http/https par ws/wss
+        this.websocket = null;
         console.log("🔧 API Client initialized, baseURL:", this.baseURL);
+        console.log("🔧 WebSocket URL:", this.wsURL);
     }
     
     /**
@@ -35,6 +38,52 @@ class VocalyxDashboardAPI {
         const data = await response.json();
         console.log("✅ Response data:", data);
         return data;
+    }
+
+    // ========================================================================
+    // WEBSOCKET
+    // ========================================================================
+    
+    connectWebSocket(onMessageCallback, onErrorCallback) {
+        // Assure une seule connexion
+        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            console.warn("WebSocket déjà connecté.");
+            return;
+        }
+        // Construire l'URL WS
+        const apiWsUrl = window.VOCALYX_CONFIG.API_URL.replace(/^http/, 'ws');
+        
+        console.log(`🔌 Connexion WebSocket à: ${apiWsUrl}/api/ws/updates`);
+        
+        // Nous utilisons /api/ws/updates car c'est là que l'API l'expose
+        this.websocket = new WebSocket(`${apiWsUrl}/api/ws/updates`);
+
+        this.websocket.onopen = (event) => {
+            console.log("✅ WebSocket connecté !");
+        };
+
+        this.websocket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                console.log("📬 Message WebSocket reçu:", message);
+                onMessageCallback(message);
+            } catch (e) {
+                console.error("Erreur parsing JSON WebSocket:", e);
+            }
+        };
+
+        this.websocket.onerror = (event) => {
+            console.error("❌ Erreur WebSocket:", event);
+            if (onErrorCallback) onErrorCallback(event);
+        };
+
+        this.websocket.onclose = (event) => {
+            console.warn("ℹ️ WebSocket déconnecté. Tentative de reconnexion dans 5s...");
+            this.websocket = null;
+            setTimeout(() => {
+                this.connectWebSocket(onMessageCallback, onErrorCallback);
+            }, 5000);
+        };
     }
     
     // ========================================================================
