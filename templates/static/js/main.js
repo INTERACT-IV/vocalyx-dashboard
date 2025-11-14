@@ -364,7 +364,7 @@ function createPageButton(page, text, isActive = false) {
     btn.dataset.page = page;
     if (isActive) btn.classList.add("active");
     btn.addEventListener("click", () => {
-        refreshTranscriptions(page, currentLimit);
+        requestDashboardUpdate(page);
     });
     return btn;
 }
@@ -436,96 +436,86 @@ function attachDeleteEvents() {
 // ============================================================================
 
 /**
+ * Fonction centralisée pour demander une mise à jour au WS
+ * Utilise les filtres et la page actuels.
+ */
+function requestDashboardUpdate(page = null) {
+    if (page) {
+        currentPage = page;
+    }
+    
+    const status = document.getElementById("status-filter")?.value || null;
+    const search = document.getElementById("search-input")?.value || null;
+    const project = document.getElementById("project-filter")?.value || null;
+
+    console.log(`WS -> C: Demande de mise à jour (Page: ${currentPage}, Filtres: ${status}, ${project}, ${search})`);
+    
+    api.sendWebSocketMessage({
+        type: "get_dashboard_state",
+        payload: {
+            page: currentPage,
+            limit: currentLimit,
+            status: status,
+            project: project,
+            search: search
+        }
+    });
+}
+
+/**
  * Gère les messages entrants du WebSocket
  * @param {object} msg - L'objet JSON reçu du serveur
  */
 function handleWebSocketMessage(msg) {
-    console.log("📬 Message WebSocket reçu:", msg.type);
     
-    // --- GESTION DE L'ÉTAT INITIAL COMPLET ---
+    let state; // Variable pour stocker les données d'état
+
     if (msg.type === "initial_dashboard_state") {
-        console.log("📊 État initial complet reçu via WebSocket:", msg.data);
-        
-        const state = msg.data;
-        
-        // 1. Mettre à jour les stats workers
-        if (state.worker_stats) {
-            console.log("  ✅ Mise à jour des workers");
-            updateWorkerHeader(state.worker_stats);
-            renderWorkerMonitoringGrid(state.worker_stats);
-        } else {
-            console.warn("  ⚠️ Pas de worker_stats dans l'état initial");
-        }
-        
-        // 2. Mettre à jour les transcriptions
-        if (state.transcriptions) {
-            console.log("  ✅ Mise à jour des transcriptions:", state.transcriptions.length, "items");
-            renderTranscriptions(state.transcriptions);
-        } else {
-            console.warn("  ⚠️ Pas de transcriptions dans l'état initial");
-        }
-        
-        // 3. Mettre à jour la pagination
-        if (state.transcription_count) {
-            console.log("  ✅ Mise à jour de la pagination");
-            const totalPages = Math.ceil(state.transcription_count.total_filtered / currentLimit);
-            updatePagination(currentPage, totalPages);
-        } else {
-            console.warn("  ⚠️ Pas de transcription_count dans l'état initial");
-        }
-        
-    // --- ANCIENS MESSAGES (compatibilité) ---
-    } else if (msg.type === "initial_worker_stats") {
-        console.log("📊 Données workers (ancien format)");
-        renderWorkerMonitoringGrid(msg.data);
-        updateWorkerHeader(msg.data);
-
-    } else if (msg.type === "initial_transcription_count") {
-        console.log("📊 Données count (ancien format)");
-        const countData = msg.data;
-        const totalPages = Math.ceil(countData.total_filtered / currentLimit);
-        updatePagination(currentPage, totalPages);
-
-    } else if (msg.type === "initial_transcriptions") {
-        console.log("📊 Données transcriptions (ancien format)");
-        renderTranscriptions(msg.data);
-
-    // --- MISES À JOUR EN TEMPS RÉEL ---
+        // Cas 1: L'état initial complet à la connexion
+        console.log("WS <- S: 📊 Données initiales (état complet) reçues");
+        state = msg.data;
+    } else if (msg.type === "dashboard_state_update") {
+        // Cas 2: Une mise à jour complète en réponse à notre demande
+        console.log("WS <- S: 🔄 Mise à jour de l'état (filtré) reçue");
+        state = msg.data;
+    } else if (msg.type === "transcription_update_trigger") {
+        // Cas 3: Un broadcast nous dit que "quelque chose" a changé
+        console.log("WS <- S: 🔔 Trigger de mise à jour reçu. Demande des données...");
+        // On demande une mise à jour avec nos filtres actuels
+        requestDashboardUpdate(currentPage); 
+        return; // Pas de données à afficher
     } else if (msg.type === "worker_stats") {
-        console.log("📊 Mise à jour workers (temps réel)");
+        // Cas 4: Juste les stats des workers (du poller interne de l'API)
+        console.log("WS <- S: 📊 Données worker_stats (update) reçues");
         const stats = msg.data;
         updateWorkerHeader(stats);
         renderWorkerMonitoringGrid(stats);
-        
-    } else if (msg.type === "dashboard_update") {
-        console.log("🔄 Mise à jour complète du dashboard (temps réel)");
-        const state = msg.data;
-        
-        // Mettre à jour tout
+        return;
+    } else if (msg.type === "error") {
+        console.error(`WS <- S: Erreur WebSocket: ${msg.message}`);
+        showToast(`Erreur serveur: ${msg.message}`, "error");
+        return;
+    } else {
+        return; // Message inconnu
+    }
+
+    // Si on a reçu un état complet (initial ou update)
+    if (state) {
+        // 1. Mettre à jour les workers (grille et header)
         if (state.worker_stats) {
-            updateWorkerHeader(state.worker_stats);
             renderWorkerMonitoringGrid(state.worker_stats);
+            updateWorkerHeader(state.worker_stats);
         }
-        
+        // 2. Mettre à jour la pagination (basé sur le compte)
+        if (state.transcription_count) {
+            const countData = state.transcription_count;
+            const totalPages = Math.ceil(countData.total_filtered / currentLimit);
+            updatePagination(currentPage, totalPages);
+        }
+        // 3. Mettre à jour la grille des transcriptions
         if (state.transcriptions) {
             renderTranscriptions(state.transcriptions);
         }
-        
-        if (state.transcription_count) {
-            const totalPages = Math.ceil(state.transcription_count.total_filtered / currentLimit);
-            updatePagination(currentPage, totalPages);
-        }
-        
-    } else if (msg.type === "transcription_update") {
-        console.log("🔄 Mise à jour transcription (temps réel)");
-        refreshTranscriptions(currentPage, currentLimit);
-        
-    } else if (msg.type === "error") {
-        console.error("❌ Erreur WebSocket:", msg.message);
-        showToast(`Erreur WebSocket: ${msg.message}`, "error");
-        
-    } else {
-        console.warn("⚠️ Type de message WebSocket inconnu:", msg.type);
     }
 }
 

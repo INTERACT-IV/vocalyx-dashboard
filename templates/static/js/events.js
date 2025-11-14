@@ -51,11 +51,12 @@ document.getElementById("upload-submit-btn").addEventListener("click", async () 
     loadingOverlay.style.display = "flex";
     
     try {
+        // L'upload reste en HTTP, c'est normal
         const result = await api.uploadAudio(file, projectName, apiKey, useVad);
         
         showToast(`✅ Upload (Projet: ${projectName}) réussi !`, "success");
         
-        await refreshTranscriptions(1, currentLimit);
+        // Le WS s'occupera du rafraîchissement
         uploadModal.style.display = "none";
         
     } catch (err) {
@@ -70,21 +71,42 @@ document.getElementById("upload-submit-btn").addEventListener("click", async () 
 // La logique de gestion des projets est maintenant dans /admin et admin.js
 
 
-// --- Filtres du Header ---
+// --- Filtres du Header (MODIFIÉS) ---
+
+// Fonction centralisée pour envoyer l'état des filtres au WebSocket
+function requestUpdateFromFilters() {
+    const status = document.getElementById("status-filter")?.value || null;
+    const search = document.getElementById("search-input")?.value || null;
+    const project = document.getElementById("project-filter")?.value || null;
+    
+    // On demande la page 1 lors d'un changement de filtre
+    currentPage = 1; 
+
+    api.sendWebSocketMessage({
+        type: "get_dashboard_state",
+        payload: {
+            page: currentPage,
+            limit: currentLimit,
+            status: status,
+            project: project,
+            search: search
+        }
+    });
+}
 
 document.getElementById("status-filter").addEventListener("change", () => {
-    refreshTranscriptions(1, currentLimit);
+    requestUpdateFromFilters();
 });
 
 document.getElementById("project-filter").addEventListener("change", () => {
-    refreshTranscriptions(1, currentLimit);
+    requestUpdateFromFilters();
 });
 
 document.getElementById("search-input").addEventListener("input", () => {
     clearTimeout(window.searchTimeout);
     window.searchTimeout = setTimeout(() => {
-        refreshTranscriptions(1, currentLimit);
-    }, 300);
+        requestUpdateFromFilters();
+    }, 300); // Délai pour ne pas surcharger
 });
 
 // --- Bouton Export ---

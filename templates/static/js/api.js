@@ -48,8 +48,20 @@ class VocalyxDashboardAPI {
     // ========================================================================
     // WEBSOCKET
     // ========================================================================
+
+    sendWebSocketMessage(message) {
+        if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+            console.error("WebSocket is not connected. Cannot send message.");
+            // Tenter une reconnexion silencieuse si possible
+            return;
+        }
+        try {
+            this.websocket.send(JSON.stringify(message));
+        } catch (err) {
+            console.error("Failed to send WebSocket message:", err);
+        }
+    }
     
-    // --- MODIFICATION MAJEURE ---
     async connectWebSocket(onMessageCallback, onErrorCallback) {
         // Assure une seule connexion
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
